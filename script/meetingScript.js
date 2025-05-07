@@ -1,5 +1,84 @@
 const timers = new Map();
+const chronometerIntervals = new Map();
 var counter = 0;
+var expectedTimeForDeveloper = createTimers();
+
+function createTimers() {
+    const infoContainer = document.getElementById("infoContainer");
+
+    const h4 = document.createElement("h4")
+    h4.innerHTML = "Info generali:"
+    infoContainer.appendChild(h4)
+
+    const p1 = document.createElement("p")
+    const expectedTime = getQueryParameter("expectedTime")
+    p1.className = "fs-5"
+    p1.innerHTML = "Durata prevista: " + expectedTime + " minuti"
+    infoContainer.appendChild(p1)
+
+    const p2 = document.createElement("p")
+    const developersNumber = getQueryParameter("developersNumber")
+    p2.className = "fs-5"
+    p2.innerHTML = "Numero di sviluppatori: " + developersNumber
+    infoContainer.appendChild(p2)
+
+    const expectedTimeForDeveloper = (expectedTime * 60) / developersNumber;
+    const convertedTime = secondsToTime(expectedTimeForDeveloper)
+    const p3 = document.createElement("p")
+    p3.className = "fs-5"
+    p3.innerHTML = "Tempo previsto per ogni sviluppatore: " + convertedTime
+    infoContainer.appendChild(p3)
+
+    return convertedTime
+}
+
+async function getOldMeetings() {
+    const url = "https://standupparo-apis.vercel.app/api/stand-ups";
+    try {
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                "x-api-key": localStorage.getItem("apiKey"),
+                "Content-Type": "application/json"
+            },
+        });
+        if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+        }
+        const json = await response.json();
+
+        const lastMeetingId = json[0].id;
+        return lastMeetingId
+    }
+    catch (error) {
+        console.error(error.message);
+    }
+}
+
+async function getLastMeetingNotes(lastMeetingId) {
+    const url = "https://standupparo-apis.vercel.app/api/stand-up?id=" + lastMeetingId;
+    try {
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                "x-api-key": localStorage.getItem("apiKey"),
+                "Content-Type": "application/json"
+            },
+        });
+        const json = await response.json();
+
+        const notes = [];
+        json.standUps.forEach(employee => {
+            notes.push(employee.notes)
+        });
+
+        return notes;
+
+    }
+    catch (error) {
+        console.error(error.message);
+    }
+}
 
 async function createEmployeesTable() {
     const url = "https://standupparo-apis.vercel.app/api/devs";
@@ -10,21 +89,25 @@ async function createEmployeesTable() {
                 "x-api-key": localStorage.getItem("apiKey")
             },
         });
-      if (!response.ok) {
-        throw new Error(`Response status: ${response.status}`);
-      }
-      const json = await response.json();
-      console.log(json);
+        if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+        }
+        const json = await response.json();
+        json.sort((a, b) => a.name.localeCompare(b.name));
 
-      json.forEach(employee => {
-            addTableRecord(employee);
-      });
-    } catch (error) {
-      console.error(error.message);
+        const lastMeetindId = await getOldMeetings();
+        const notes = await getLastMeetingNotes(lastMeetindId);
+
+        json.forEach(employee => {
+            addTableRecord(employee, notes[counter]);
+        });
+    }
+    catch (error) {
+        console.error(error.message);
     }
 }
 
-function addTableRecord(employee) {
+function addTableRecord(employee, note) {
     const tbody = document.getElementById("tbody");
     const tr = document.createElement("tr");
 
@@ -39,7 +122,7 @@ function addTableRecord(employee) {
     tr.appendChild(td1);
 
     const td2 = document.createElement("td");
-    td2.className ="d-flex align-itmes-center justify-content-center"
+    td2.className = "d-flex align-itmes-center justify-content-center"
 
     const playButton = document.createElement("button");
     playButton.type = "button";
@@ -79,8 +162,8 @@ function addTableRecord(employee) {
 
     const timerDisplay = document.createElement("div");
     timerDisplay.className = "employeeTime";
-    timerDisplay.innerHTML ="00:00:00";
-    
+    timerDisplay.innerHTML = "00:00:00";
+
     td2.appendChild(playButton);
     td2.appendChild(pauseButton);
     td2.appendChild(timerDisplay);
@@ -95,12 +178,18 @@ function addTableRecord(employee) {
     td3.appendChild(textInput);
     tr.appendChild(td3);
 
+    const td4 = document.createElement("td");
+    td4.innerHTML = note;
+    tr.appendChild(td4);
+
     tbody.appendChild(tr);
 
     timers.set(timerDisplay, {
+        id: counter,
         elapsedTime: 0,
         intervalId: null,
-        running: false
+        running: false,
+        warned: false
     });
 
     playButton.addEventListener("click", () => startChronometer(timerDisplay));
@@ -120,22 +209,45 @@ function updateDisplay(displayElement, elapsedTime) {
 
 function startChronometer(displayElement) {
     const timer = timers.get(displayElement);
-    if (!timer.running) {
-        timer.startTime = Date.now() - timer.elapsedTime;
-        timer.intervalId = setInterval(() => {
-            timer.elapsedTime = Date.now() - timer.startTime;
-            updateDisplay(displayElement, timer.elapsedTime);
-        }, 1000);
-        timer.running = true;
-    }
+    if (!timer) return;
+
+    timers.forEach((otherTimer, otherDisplay) => {
+        if (otherDisplay !== displayElement && otherTimer.running) {
+            stopChronometer(otherDisplay);
+        }
+    });
+
+    if (timer.running) return;
+
+    timer.startTime = Date.now() - (timer.elapsedTime || 0);
+    timer.running = true;
+
+    const intervalId = setInterval(() => {
+        const now = Date.now();
+        const newElapsed = now - timer.startTime;
+        const newSeconds = Math.floor(newElapsed / 1000);
+
+        if (newSeconds !== timer.lastSeconds) {
+            timer.elapsedTime = newElapsed;
+            timer.lastSeconds = newSeconds;
+            updateDisplay(displayElement, newElapsed);
+            checkTimer(displayElement, displayElement.textContent, expectedTimeForDeveloper, timer);
+            updateGlobalTimer(timers);
+        }
+    }, 200);
+
+    chronometerIntervals.set(displayElement, intervalId);
 }
 
 function stopChronometer(displayElement) {
+    const intervalId = chronometerIntervals.get(displayElement);
     const timer = timers.get(displayElement);
-    if (timer.running) {
-        clearInterval(timer.intervalId);
-        timer.running = false;
+
+    if (intervalId) {
+        clearInterval(intervalId);
+        chronometerIntervals.delete(displayElement);
     }
+    if (timer) timer.running = false;
 }
 
 function updateGlobalTimer(timers) {
@@ -149,38 +261,33 @@ function updateGlobalTimer(timers) {
     updateDisplay(globalTimer, totalTime)
 }
 
-setInterval(() => {
-    updateGlobalTimer(timers);
-}, 1000);
+function checkTimer(displayElement, time, expectedTimeForDeveloper, timer) {
+    if (!timer) return;
+    const remaining = timeToSeconds(expectedTimeForDeveloper) - timeToSeconds(time);
 
-const dateData = getTodaysDate();
-
-function getTodaysDate() {
-    const now = new Date;
-    const todayDate = now.toLocaleDateString();
-    const formatteddDate = formatdDate(todayDate);
-    console.log(formatteddDate)
-
-    const currentTime = now.toLocaleTimeString();
-    
-    return formatteddDate + "T" + currentTime + "Z"
+    if (remaining < 60 && remaining >= 30 && timer.warnedLevel !== "warning") {
+        displayElement.classList.add("warningText");
+        timer.warnedLevel = "warning";
+    }
+    else if (remaining < 30 && timer.warnedLevel !== "danger") {
+        displayElement.classList.remove("warningText");
+        displayElement.classList.add("dangerText");
+        timer.warnedLevel = "danger";
+    }
 }
 
-async function sendData() {
+async function createRequestBody() {
     var totalTime = extractSeconds(document.getElementById("globalTimer").textContent);
     const employeeIds = document.getElementsByClassName("employeeId")
     const employeeTimes = Array.from(document.getElementsByClassName("employeeTime"))
     const employeeNotes = document.getElementsByClassName("employeeNotes")
 
     for (let i = 0; i < employeeTimes.length; i += 1) {
-        console.log(employeeTimes[i])
         employeeTimes[i] = extractSeconds(employeeTimes[i].textContent)
-        console.log(employeeTimes[i])
     }
-    
+
     const standUpsInfo = new Array;
     for (let i = 0; i < counter; i += 1) {
-        console.log(employeeIds[i])
         standUpsInfo.push({
             devId: Number(employeeIds[i].textContent),
             durationMins: Number(employeeTimes[i]),
@@ -189,7 +296,7 @@ async function sendData() {
     }
 
     const requestBody = {
-        date: dateData,
+        date: dateData = getTodaysDate(),
         durationMins: totalTime,
         standUpsInfo: standUpsInfo
     }
@@ -213,9 +320,21 @@ async function fetchPost(url, requestBody) {
             throw new Error(`Response status: ${response.status}`);
         }
         alert("Salvataggio avvenuto!")
-    } catch (error) {
+        window.location.href = "dashboard.html";
+    }
+    catch (error) {
         console.error(error.message);
     }
+}
+
+function getTodaysDate() {
+    const now = new Date;
+    const todayDate = now.toLocaleDateString();
+    const formatteddDate = formatdDate(todayDate);
+
+    const currentTime = now.toLocaleTimeString();
+
+    return formatteddDate + "T" + currentTime + "Z"
 }
 
 function formatdDate(inputDate) {
@@ -227,4 +346,21 @@ function formatdDate(inputDate) {
 function extractSeconds(time) {
     const [hours, minutes, seconds] = time.split(":").map(Number);
     return hours * 3600 + minutes * 60 + seconds;
+}
+
+function timeToSeconds(time) {
+    let parts = time.split(':');
+    return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2]);
+}
+
+function secondsToTime(seconds) {
+    let hours = Math.floor(seconds / 3600);
+    let minutes = Math.floor((seconds % 3600) / 60);
+    let secs = Math.round(seconds % 60);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function getQueryParameter(parameterName) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(parameterName);
 }

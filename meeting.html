@@ -6,6 +6,7 @@
     <meta name="description" content="Stand-up meeting application main page">
     <title>Meeting Page</title>
 
+    <link rel="stylesheet" href="style/warning.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/2.2.2/css/dataTables.bootstrap5.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
@@ -25,11 +26,10 @@
 
                 <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
                     <li><a href="dashboard.html" class="nav-link px-2 text-black fs-4 ms-2">Home</a></li>
-                    <li><a href="meeting.html" class="nav-link px-2 text-black fw-bold fs-4 ms-2">Meeting</a></li>
                 </ul>
 
                 <div class="text-end">
-                    <button type="button" class="btn btn-warning" onclick="logout()">Logout</button>
+                    <button type="button" class="btn btn-lg border border-2 border-dark btn-warning" onclick="logout()">Logout</button>
                 </div>
             </div>
         </div>
@@ -37,20 +37,31 @@
 
     <main class="container">
         <h2 class="mt-3 mb-3">Dati della riunione</h2>
-        <table id="employeesTable" class="table table-info table-striped table-hover align-middle">
+        <div id="infoContainer">
+
+        </div>
+        <table id="employeesTable" class="table table-info table-striped table-hover align-middle s">
             <thead>
                 <tr class="table-primary">
                     <th>Sviluppatori</th>
                     <th class="text-center" rowspan="3">Azioni</th>
                     <th>Note</th>
+                    <th>Ultima nota</th>
                 </tr>
             </thead>
             <tbody id="tbody"></tbody>
         </table>
-        <div id="globalTimer">00:00:00</div>
-        <button type="button" class="btn btn-primary btn-lg" onclick="sendData()">Invia i dati</button>
+        <div class="d-flex ">
+            <div class="fs-5 me-5 mb-4">Durata totale: </div>
+            <div class="fs-5" id="globalTimer">00:00:00</div>
+        </div>
+        <button type="button" class="btn btn-primary btn-lg" onclick="createRequestBody()">Invia i dati</button>
     </main>
+
+    <footer class="position-absolute w-100 bottom-0">
+        <p class="text-center text-body-secondary border-top my-4 py-3">© 2025 ITS Incom</p>
+    </footer>
 </body>
-<script src="meetingScript.js"></script>
-<script src="script.js"></script>
+<script src="script/meetingScript.js"></script>
+<script src="script/globalScript.js"></script>
 </html>
